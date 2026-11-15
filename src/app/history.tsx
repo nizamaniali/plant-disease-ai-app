@@ -2,51 +2,97 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import {
-    ActivityIndicator,
-    FlatList,
-    Image,
-    Pressable,
-    RefreshControl,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
-    getScanHistory,
-    getScanImageUrl,
-    ScanHistoryItem,
+  getScanHistory,
+  getScanImageUrl,
+  PredictionResponse,
+  ScanHistoryItem,
 } from '@/services/api';
+
+import PredictionResult from '@/components/scanner/PredictionResult';
+
+const HISTORY_CACHE_KEY = '@leafsense_scan_history';
 
 export default function HistoryScreen() {
   const [scans, setScans] = useState<ScanHistoryItem[]>([]);
+  const [selectedScan, setSelectedScan] =
+    useState<ScanHistoryItem | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
 
+  // Fetch latest history and save it locally.
   const fetchHistory = useCallback(async () => {
     try {
-      setError('');
-
       const response = await getScanHistory(50);
 
+      // Update screen.
       setScans(response.scans);
+      setError('');
+
+      // Save latest history for offline access.
+      await AsyncStorage.setItem(
+        HISTORY_CACHE_KEY,
+        JSON.stringify(response.scans)
+      );
     } catch (err) {
       console.error('History error:', err);
-      setError('Unable to load scan history. Please try again.');
+
+      setError(
+        'Unable to refresh scan history. Please check your connection and try again.'
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchHistory();
+  // Load locally saved history first, then contact the backend.
+  const loadHistory = useCallback(async () => {
+    try {
+      const cachedHistory = await AsyncStorage.getItem(
+        HISTORY_CACHE_KEY
+      );
+
+      if (cachedHistory) {
+        const parsedHistory = JSON.parse(cachedHistory);
+
+        if (Array.isArray(parsedHistory)) {
+          setScans(parsedHistory);
+        }
+      }
+    } catch (err) {
+      console.error('Local history loading error:', err);
+    } finally {
+      // Show cached records without waiting for the server.
+      setLoading(false);
+    }
+
+    // Refresh cached data from the backend.
+    await fetchHistory();
   }, [fetchHistory]);
 
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
+
   const onRefresh = () => {
+    if (refreshing) return;
+
     setRefreshing(true);
     fetchHistory();
   };
@@ -62,9 +108,42 @@ export default function HistoryScreen() {
     return new Date(date).toLocaleString();
   };
 
+  const createPredictionResponse = (
+    scan: ScanHistoryItem
+  ): PredictionResponse => {
+    return {
+      success: true,
+      filename: 'Previous scan',
+      model: scan.model_name,
+      result: {
+        predicted_class: scan.predicted_disease,
+        confidence: Number(scan.confidence),
+        top_predictions: (scan.top_predictions || []).map((item) => ({
+          class_name: item.class_name,
+          confidence: Number(item.confidence),
+        })),
+      },
+    };
+  };
+
+  // Show detailed results when a history card is selected.
+  if (selectedScan) {
+    return (
+      <PredictionResult
+        imageUri={getScanImageUrl(selectedScan.id)}
+        prediction={createPredictionResponse(selectedScan)}
+        onScanAgain={() => setSelectedScan(null)}
+        actionLabel="←  Back to History"
+      />
+    );
+  }
+
   const renderScan = ({ item }: { item: ScanHistoryItem }) => {
     return (
-      <View style={styles.card}>
+      <Pressable
+        style={styles.card}
+        onPress={() => setSelectedScan(item)}
+      >
         <Image
           source={{ uri: getScanImageUrl(item.id) }}
           style={styles.image}
@@ -92,17 +171,58 @@ export default function HistoryScreen() {
           <Text style={styles.date}>
             {formatDate(item.created_at)}
           </Text>
+
+          <Text style={styles.viewDetails}>
+            View Details →
+          </Text>
         </View>
-      </View>
+      </Pressable>
     );
   };
 
+  // Initial loading screen.
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#23834D" />
-          <Text style={styles.message}>Loading scan history...</Text>
+          <Text style={styles.message}>
+            Loading scan history...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Full-screen error only when no cached records are available.
+  if (error && scans.length === 0) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Scan History</Text>
+          <Text style={styles.subtitle}>
+            Review your previous plant scans
+          </Text>
+        </View>
+
+        <View style={styles.center}>
+          <Text style={styles.error}>
+            {error}
+          </Text>
+
+          <Pressable
+            style={styles.retryButton}
+            onPress={onRefresh}
+            disabled={refreshing}
+          >
+            {refreshing ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.retryText}>
+                Try Again
+              </Text>
+            )}
+          </Pressable>
         </View>
       </SafeAreaView>
     );
@@ -112,44 +232,68 @@ export default function HistoryScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Scan History</Text>
+
         <Text style={styles.subtitle}>
           Review your previous plant scans
         </Text>
       </View>
 
-      {error ? (
-        <View style={styles.center}>
-          <Text style={styles.error}>{error}</Text>
+      {error !== '' && (
+        <View style={styles.errorBanner}>
+          <View style={styles.errorContent}>
+            <Text style={styles.bannerTitle}>
+              Connection unavailable
+            </Text>
 
-          <Pressable style={styles.retryButton} onPress={fetchHistory}>
-            <Text style={styles.retryText}>Try Again</Text>
+            <Text style={styles.bannerMessage}>
+              Your previously saved scans are still available.
+            </Text>
+          </View>
+
+          <Pressable
+            style={styles.bannerRetry}
+            onPress={onRefresh}
+            disabled={refreshing}
+          >
+            {refreshing ? (
+              <ActivityIndicator color="#1B5E20" size="small" />
+            ) : (
+              <Text style={styles.bannerRetryText}>
+                Retry
+              </Text>
+            )}
           </Pressable>
         </View>
-      ) : (
-        <FlatList
-          data={scans}
-          keyExtractor={(item) => item.id}
-          renderItem={renderScan}
-          contentContainerStyle={
-            scans.length === 0 ? styles.emptyContainer : styles.list
-          }
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={['#23834D']}
-            />
-          }
-          ListEmptyComponent={
-            <View style={styles.center}>
-              <Text style={styles.emptyTitle}>No Scans Yet</Text>
-              <Text style={styles.message}>
-                Your plant disease scans will appear here.
-              </Text>
-            </View>
-          }
-        />
       )}
+
+      <FlatList
+        data={scans}
+        keyExtractor={(item) => item.id}
+        renderItem={renderScan}
+        contentContainerStyle={
+          scans.length === 0
+            ? styles.emptyContainer
+            : styles.list
+        }
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#23834D']}
+          />
+        }
+        ListEmptyComponent={
+          <View style={styles.center}>
+            <Text style={styles.emptyTitle}>
+              No Scans Yet
+            </Text>
+
+            <Text style={styles.message}>
+              Your plant disease scans will appear here.
+            </Text>
+          </View>
+        }
+      />
     </SafeAreaView>
   );
 }
@@ -232,6 +376,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#888888',
   },
+  viewDetails: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#23834D',
+    marginTop: 8,
+  },
   center: {
     flex: 1,
     justifyContent: 'center',
@@ -263,9 +413,50 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     borderRadius: 9,
     marginTop: 18,
+    minWidth: 110,
+    alignItems: 'center',
   },
   retryText: {
     color: '#FFFFFF',
     fontWeight: 'bold',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3F0',
+    borderWidth: 1,
+    borderColor: '#F5D0C8',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginBottom: 14,
+    padding: 13,
+  },
+  errorContent: {
+    flex: 1,
+    marginRight: 10,
+  },
+  bannerTitle: {
+    color: '#B83232',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  bannerMessage: {
+    color: '#795B55',
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 4,
+  },
+  bannerRetry: {
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 8,
+    minWidth: 58,
+    alignItems: 'center',
+  },
+  bannerRetryText: {
+    color: '#1B5E20',
+    fontSize: 12,
+    fontWeight: '800',
   },
 });

@@ -1,21 +1,30 @@
 
-import React from 'react';
+import { useState } from 'react';
+
 import {
-  View,
-  Text,
+  ActivityIndicator,
   Image,
+  Pressable,
   ScrollView,
   StyleSheet,
-  Pressable,
+  Text,
+  View,
 } from 'react-native';
+
+import Markdown from 'react-native-markdown-display';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PredictionResponse } from '@/services/api';
+import {
+  DiseaseExplanationResponse,
+  explainDisease,
+  PredictionResponse,
+} from '@/services/api';
 
 interface Props {
   imageUri: string;
   prediction: PredictionResponse;
   onScanAgain: () => void;
+  actionLabel?: string;
 }
 
 const GREEN = '#2E7D32';
@@ -33,6 +42,7 @@ export default function PredictionResult({
   imageUri,
   prediction,
   onScanAgain,
+  actionLabel = '↻  Scan Another Plant',
 }: Props) {
   const result = prediction.result;
 
@@ -41,6 +51,58 @@ export default function PredictionResult({
   const isHealthy = result.predicted_class
     .toLowerCase()
     .includes('healthy');
+
+  const [explanation, setExplanation] =
+    useState<DiseaseExplanationResponse | null>(null);
+
+  const [explanationLoading, setExplanationLoading] =
+    useState(false);
+
+  const [explanationError, setExplanationError] = useState('');
+
+  const handleGetExplanation = async () => {
+    if (explanationLoading) return;
+
+    try {
+      setExplanationLoading(true);
+      setExplanationError('');
+
+      const classParts = result.predicted_class.split('___');
+
+      const crop = classParts[0]
+        .replace(/_/g, ' ')
+        .trim();
+
+      const disease = (classParts[1] || 'Unknown condition')
+        .replace(/_/g, ' ')
+        .trim();
+
+      const response = await explainDisease(crop, disease);
+
+      setExplanation(response);
+    } catch (error) {
+  const rawMessage =
+    error instanceof Error ? error.message : '';
+
+  const isConnectionError =
+    /fetch failed|network request failed|no route to host|connectexception|failed to connect|host unreachable|networkerror|timed out/i.test(
+      rawMessage.toLowerCase()
+    );
+
+  if (isConnectionError) {
+    setExplanationError(
+      'Unable to connect to Gemini AI. Please check your computer’s internet connection and try again.'
+    );
+  } else {
+    setExplanationError(
+      rawMessage ||
+      'Unable to generate AI explanation. Please try again later.'
+    );
+  }
+} finally {
+  setExplanationLoading(false);
+}
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -51,6 +113,7 @@ export default function PredictionResult({
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Analysis Results</Text>
+
           <Text style={styles.headerSubtitle}>
             Your plant image has been analyzed successfully.
           </Text>
@@ -59,6 +122,7 @@ export default function PredictionResult({
         {/* Scanned image */}
         <View style={styles.imageContainer}>
           <Image source={{ uri: imageUri }} style={styles.image} />
+
           <View style={styles.imageBadge}>
             <Text style={styles.imageBadgeText}>
               ✓ Analysis complete
@@ -72,7 +136,9 @@ export default function PredictionResult({
             <View
               style={[
                 styles.statusIcon,
-                { backgroundColor: isHealthy ? '#E8F5E9' : '#FFF3E0' },
+                {
+                  backgroundColor: isHealthy ? '#E8F5E9' : '#FFF3E0',
+                },
               ]}
             >
               <Text style={styles.statusEmoji}>
@@ -82,9 +148,14 @@ export default function PredictionResult({
 
             <View style={styles.statusTextContainer}>
               <Text style={styles.statusLabel}>
-                {isHealthy ? 'Healthy classification' : 'Detected condition'}
+                {isHealthy
+                  ? 'Healthy classification'
+                  : 'Detected condition'}
               </Text>
-              <Text style={styles.diseaseName}>{predictedName}</Text>
+
+              <Text style={styles.diseaseName}>
+                {predictedName}
+              </Text>
             </View>
           </View>
 
@@ -92,6 +163,7 @@ export default function PredictionResult({
 
           <View style={styles.confidenceHeader}>
             <Text style={styles.confidenceLabel}>Model score</Text>
+
             <Text style={styles.confidenceValue}>
               {result.confidence.toFixed(2)}%
             </Text>
@@ -101,20 +173,26 @@ export default function PredictionResult({
             <View
               style={[
                 styles.progressFill,
-                { width: `${Math.min(100, Math.max(0, result.confidence))}%` },
+                {
+                  width: `${Math.min(
+                    100,
+                    Math.max(0, result.confidence)
+                  )}%`,
+                },
               ]}
             />
           </View>
 
           <Text style={styles.confidenceNote}>
-            This is the model's softmax score, not a calibrated measure of
-            diagnostic certainty.
+            This is the model's softmax score, not a calibrated measure
+            of diagnostic certainty.
           </Text>
         </View>
 
         {/* Alternative predictions */}
         <View style={styles.predictionsSection}>
           <Text style={styles.sectionTitle}>Top 3 Predictions</Text>
+
           <Text style={styles.sectionSubtitle}>
             Other classes considered by the model
           </Text>
@@ -138,7 +216,10 @@ export default function PredictionResult({
                     style={[
                       styles.smallProgressFill,
                       {
-                        width: `${Math.min(100, Math.max(0, item.confidence))}%`,
+                        width: `${Math.min(
+                          100,
+                          Math.max(0, item.confidence)
+                        )}%`,
                       },
                     ]}
                   />
@@ -152,12 +233,114 @@ export default function PredictionResult({
           ))}
         </View>
 
+        {/* Gemini AI Disease Insights */}
+        <View style={styles.geminiCard}>
+          <View style={styles.geminiHeader}>
+            <Text style={styles.geminiTitle}>
+              ✨ AI Disease Insights
+            </Text>
+
+            <Text style={styles.geminiBadge}>
+              Gemini AI
+            </Text>
+          </View>
+
+          <Text style={styles.geminiSubtitle}>
+            Understand the detected condition with AI-powered
+            information about symptoms, causes, prevention and
+            disease management.
+          </Text>
+
+          {!explanation && (
+            <Pressable
+              style={[
+                styles.geminiButton,
+                explanationLoading && styles.disabledButton,
+              ]}
+              onPress={handleGetExplanation}
+              disabled={explanationLoading}
+            >
+              {explanationLoading ? (
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator color="#FFFFFF" />
+
+                  <Text style={styles.geminiButtonText}>
+                    Generating explanation...
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.geminiButtonText}>
+                  ✨ Get AI Explanation
+                </Text>
+              )}
+            </Pressable>
+          )}
+
+          {/* Error and retry */}
+          {explanationError !== '' && (
+            <View style={styles.geminiError}>
+              <Text style={styles.geminiErrorText}>
+                {explanationError}
+              </Text>
+
+              <Pressable
+                style={styles.geminiRetryButton}
+                onPress={handleGetExplanation}
+                disabled={explanationLoading}
+              >
+                <Text style={styles.geminiRetryText}>
+                  Try Again
+                </Text>
+              </Pressable>
+            </View>
+          )}
+
+          {/* Formatted Gemini explanation */}
+          {explanation && (
+            <View style={styles.explanationContainer}>
+              <View style={styles.explanationStatus}>
+                <Text style={styles.explanationStatusText}>
+                  ✓ Explanation generated
+                </Text>
+
+                {explanation.cached && (
+                  <Text style={styles.cachedText}>
+                    Cached result
+                  </Text>
+                )}
+              </View>
+
+              <Markdown style={markdownStyles}>
+                {explanation.explanation}
+              </Markdown>
+
+              <Pressable
+                style={styles.geminiRetryButton}
+                onPress={handleGetExplanation}
+                disabled={explanationLoading}
+              >
+                {explanationLoading ? (
+                  <ActivityIndicator color="#1B5E20" />
+                ) : (
+                  <Text style={styles.geminiRetryText}>
+                    Generate Again
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          )}
+        </View>
+
         {/* Model information */}
         <View style={styles.modelCard}>
-          <Text style={styles.modelTitle}>AI Model Information</Text>
+          <Text style={styles.modelTitle}>
+            AI Model Information
+          </Text>
+
           <Text style={styles.modelText}>
             Model: {prediction.model}
           </Text>
+
           <Text style={styles.modelText}>
             Supported classes: 31
           </Text>
@@ -168,31 +351,129 @@ export default function PredictionResult({
           <Text style={styles.disclaimerTitle}>
             Important information
           </Text>
+
           <Text style={styles.disclaimerText}>
-            This result is an AI-generated prediction. It should not be
-            treated as a definitive agricultural diagnosis. Confirm
-            suspected diseases before applying treatments.
+            This result is an AI-generated prediction. It should not
+            be treated as a definitive agricultural diagnosis. Confirm
+            suspected diseases before applying treatments. AI-generated
+            recommendations should also be verified before use.
           </Text>
         </View>
 
-        {/* Scan again */}
+        {/* Scan again / Back to history */}
         <Pressable
           style={styles.scanAgainButton}
           onPress={onScanAgain}
         >
           <Text style={styles.scanAgainText}>
-            ↻  Scan Another Plant
+            {actionLabel}
           </Text>
         </Pressable>
 
         <Text style={styles.footer}>
-          PlantCare AI · Powered by EfficientNet-B0
+          LeafSense AI · Powered by EfficientNet-B0
         </Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+// Markdown formatting
+const markdownStyles = {
+  body: {
+    color: '#344638',
+    fontSize: 13,
+    lineHeight: 22,
+  },
+  paragraph: {
+    marginTop: 5,
+    marginBottom: 12,
+    color: '#344638',
+    fontSize: 13,
+    lineHeight: 23,
+  },
+  heading1: {
+    color: '#1B5E20',
+    fontSize: 20,
+    fontWeight: '800' as const,
+    marginTop: 18,
+    marginBottom: 10,
+  },
+  heading2: {
+    color: '#23733A',
+    fontSize: 17,
+    fontWeight: '800' as const,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  heading3: {
+    color: '#2E7D32',
+    fontSize: 15,
+    fontWeight: '800' as const,
+    marginTop: 13,
+    marginBottom: 7,
+  },
+  strong: {
+    color: '#1B5E20',
+    fontWeight: '800' as const,
+  },
+  em: {
+    fontStyle: 'italic' as const,
+    color: '#52635A',
+  },
+  bullet_list: {
+    marginBottom: 10,
+  },
+  ordered_list: {
+    marginBottom: 10,
+  },
+  list_item: {
+    marginBottom: 6,
+  },
+  bullet_list_icon: {
+    color: '#23834D',
+    marginRight: 8,
+  },
+  ordered_list_icon: {
+    color: '#23834D',
+    fontWeight: '700' as const,
+    marginRight: 8,
+  },
+  hr: {
+    backgroundColor: '#E0E9E0',
+    height: 1,
+    marginTop: 12,
+    marginBottom: 15,
+  },
+  blockquote: {
+    backgroundColor: '#F0F7F0',
+    borderLeftColor: '#4CAF50',
+    borderLeftWidth: 3,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginVertical: 10,
+  },
+  code_inline: {
+    backgroundColor: '#EAF3EA',
+    color: '#1B5E20',
+    paddingHorizontal: 4,
+    borderRadius: 4,
+  },
+  code_block: {
+    backgroundColor: '#F0F5F0',
+    color: '#344638',
+    padding: 12,
+    borderRadius: 10,
+  },
+  fence: {
+    backgroundColor: '#F0F5F0',
+    color: '#344638',
+    padding: 12,
+    borderRadius: 10,
+  },
+};
+
+// Main screen styles
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -376,6 +657,102 @@ const styles = StyleSheet.create({
     color: GREEN,
     fontSize: 12,
     fontWeight: '800',
+  },
+  geminiCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 18,
+    borderRadius: 18,
+    marginTop: 22,
+    borderWidth: 1,
+    borderColor: '#C8E6C9',
+  },
+  geminiHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  geminiTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#1B5E20',
+  },
+  geminiBadge: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#23733A',
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  geminiSubtitle: {
+    fontSize: 12,
+    lineHeight: 19,
+    color: '#718071',
+    marginTop: 12,
+    marginBottom: 15,
+  },
+  geminiButton: {
+    backgroundColor: '#23834D',
+    padding: 15,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  disabledButton: {
+    opacity: 0.7,
+  },
+  geminiButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  geminiError: {
+    backgroundColor: '#FFF3F0',
+    padding: 12,
+    borderRadius: 10,
+  },
+  geminiErrorText: {
+    color: '#C62828',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  geminiRetryButton: {
+    alignSelf: 'flex-start',
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 13,
+    borderRadius: 8,
+    backgroundColor: '#E8F5E9',
+  },
+  geminiRetryText: {
+    color: '#1B5E20',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  explanationContainer: {
+    borderTopWidth: 1,
+    borderTopColor: '#E8EDE6',
+    paddingTop: 14,
+  },
+  explanationStatus: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  explanationStatusText: {
+    color: '#23834D',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  cachedText: {
+    color: '#718071',
+    fontSize: 10,
   },
   modelCard: {
     backgroundColor: '#E8F5E9',

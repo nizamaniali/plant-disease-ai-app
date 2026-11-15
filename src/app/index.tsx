@@ -1,12 +1,13 @@
 
-import React from 'react';
+import { useRouter } from 'expo-router';
+
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
   Pressable,
+  ScrollView,
   StatusBar,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -33,6 +34,12 @@ const crops = [
 ];
 
 export default function HomeScreen() {
+  const router = useRouter();
+
+  const goToScanner = () => {
+    router.push('/scan');
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
@@ -45,7 +52,7 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>WELCOME TO</Text>
-            <Text style={styles.appName}>PlantCare AI</Text>
+            <Text style={styles.appName}>LeafSense AI</Text>
           </View>
 
           <View style={styles.logo}>
@@ -70,9 +77,11 @@ export default function HomeScreen() {
         <Pressable
           style={({ pressed }) => [
             styles.scanCard,
-            pressed && { opacity: 0.9 },
+            pressed && styles.scanCardPressed,
           ]}
-          onPress={() => {}}
+          onPress={goToScanner}
+          accessibilityRole="button"
+          accessibilityLabel="Start scanning a plant"
         >
           <View style={styles.scanCardContent}>
             <View style={styles.scanIcon}>
@@ -133,7 +142,7 @@ export default function HomeScreen() {
         </View>
 
         <Text style={styles.footer}>
-          PlantCare AI · Helping plants grow healthier
+          LeafSense AI · Helping plants grow healthier
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -203,6 +212,9 @@ const styles = StyleSheet.create({
     padding: 22,
     overflow: 'hidden',
     position: 'relative',
+  },
+  scanCardPressed: {
+    opacity: 0.9,
   },
   scanCardContent: {
     zIndex: 1,

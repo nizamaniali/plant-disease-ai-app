@@ -1,180 +1,699 @@
-import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
-import { Platform, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ExternalLink } from '@/components/external-link';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Collapsible } from '@/components/ui/collapsible';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { useState } from 'react';
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
-export default function TabTwoScreen() {
-  const safeAreaInsets = useSafeAreaInsets();
-  const insets = {
-    ...safeAreaInsets,
-    bottom: safeAreaInsets.bottom + BottomTabInset + Spacing.three,
+import {
+  getApiUrl,
+  setApiUrl,
+  testApiConnection,
+} from '@/services/api';
+
+// --------------------------------------------------
+// DATA
+// --------------------------------------------------
+
+const crops = [
+  'Apple',
+  'Cherry',
+  'Corn',
+  'Grape',
+  'Peach',
+  'Bell Pepper',
+  'Potato',
+  'Tomato',
+];
+
+const features = [
+  {
+    icon: '📸',
+    title: 'AI Plant Scanning',
+    description:
+      'Capture or upload a leaf image to identify potential plant diseases.',
+  },
+  {
+    icon: '🧠',
+    title: 'Deep Learning',
+    description:
+      'Uses a custom-trained EfficientNet-B0 model for image classification.',
+  },
+  {
+    icon: '📊',
+    title: 'Scan History',
+    description:
+      'View your previous scans, predictions, confidence scores, and images.',
+  },
+  {
+    icon: '💡',
+    title: 'AI Disease Insights',
+    description:
+      'Get additional information about detected diseases and possible care recommendations.',
+  },
+];
+
+// --------------------------------------------------
+// REUSABLE SECTION TITLE
+// --------------------------------------------------
+
+function SectionTitle({ title }: { title: string }) {
+  return <Text style={styles.sectionTitle}>{title}</Text>;
+}
+
+// --------------------------------------------------
+// ABOUT SCREEN
+// --------------------------------------------------
+
+export default function AboutScreen() {
+  const [serverUrl, setServerUrl] = useState(getApiUrl());
+  const [testing, setTesting] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const [connectionMessage, setConnectionMessage] = useState('');
+  const [connectionSuccess, setConnectionSuccess] = useState(false);
+
+  // --------------------------------------------------
+  // TEST SERVER CONNECTION
+  // --------------------------------------------------
+
+  const handleTestConnection = async () => {
+    if (!serverUrl.trim()) {
+      Alert.alert(
+        'Missing Server Address',
+        'Please enter your backend server address.'
+      );
+      return;
+    }
+
+    setTesting(true);
+    setConnectionMessage('');
+
+    try {
+      const result = await testApiConnection(serverUrl);
+
+      setConnectionSuccess(result.success);
+      setConnectionMessage(result.message);
+    } catch (error) {
+      setConnectionSuccess(false);
+      setConnectionMessage(
+        'Unable to test the connection. Please try again.'
+      );
+    } finally {
+      setTesting(false);
+    }
   };
-  const theme = useTheme();
 
-  const contentPlatformStyle = Platform.select({
-    android: {
-      paddingTop: insets.top,
-      paddingLeft: insets.left,
-      paddingRight: insets.right,
-      paddingBottom: insets.bottom,
-    },
-    web: {
-      paddingTop: Spacing.six,
-      paddingBottom: Spacing.four,
-    },
-  });
+  // --------------------------------------------------
+  // SAVE SERVER ADDRESS
+  // --------------------------------------------------
+
+  const handleSaveServer = async () => {
+    if (!serverUrl.trim()) {
+      Alert.alert(
+        'Missing Server Address',
+        'Please enter a server address before saving.'
+      );
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      await setApiUrl(serverUrl);
+
+      setServerUrl(getApiUrl());
+
+      Alert.alert(
+        'Server Address Saved',
+        'Your LeafSense AI server address has been updated successfully.'
+      );
+    } catch (error) {
+      Alert.alert(
+        'Invalid Server Address',
+        error instanceof Error
+          ? error.message
+          : 'Please enter a valid server address.'
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // --------------------------------------------------
+  // SCREEN UI
+  // --------------------------------------------------
 
   return (
     <ScrollView
-      style={[styles.scrollView, { backgroundColor: theme.background }]}
-      contentInset={insets}
-      contentContainerStyle={[styles.contentContainer, contentPlatformStyle]}>
-      <ThemedView style={styles.container}>
-        <ThemedView style={styles.titleContainer}>
-          <ThemedText type="subtitle">Explore</ThemedText>
-          <ThemedText style={styles.centerText} themeColor="textSecondary">
-            This starter app includes example{'\n'}code to help you get started.
-          </ThemedText>
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
+      <StatusBar barStyle="dark-content" backgroundColor="#F5FAF5" />
 
-          <ExternalLink href="https://docs.expo.dev" asChild>
-            <Pressable style={({ pressed }) => pressed && styles.pressed}>
-              <ThemedView type="backgroundElement" style={styles.linkButton}>
-                <ThemedText type="link">Expo documentation</ThemedText>
-                <SymbolView
-                  tintColor={theme.text}
-                  name={{ ios: 'arrow.up.right.square', android: 'link', web: 'link' }}
-                  size={12}
-                />
-              </ThemedView>
-            </Pressable>
-          </ExternalLink>
-        </ThemedView>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.logo}>
+          <Text style={styles.logoText}>🌿</Text>
+        </View>
 
-        <ThemedView style={styles.sectionsWrapper}>
-          <Collapsible title="File-based routing">
-            <ThemedText type="small">
-              This app has two screens: <ThemedText type="code">src/app/index.tsx</ThemedText> and{' '}
-              <ThemedText type="code">src/app/explore.tsx</ThemedText>
-            </ThemedText>
-            <ThemedText type="small">
-              The layout file in <ThemedText type="code">src/app/_layout.tsx</ThemedText> sets up
-              the tab navigator.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/router/introduction">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
+        <Text style={styles.appName}>LeafSense AI</Text>
 
-          <Collapsible title="Android, iOS, and web support">
-            <ThemedView type="backgroundElement" style={styles.collapsibleContent}>
-              <ThemedText type="small">
-                You can open this project on Android, iOS, and the web. To open the web version,
-                press <ThemedText type="smallBold">w</ThemedText> in the terminal running this
-                project.
-              </ThemedText>
-              <Image
-                source={require('@/assets/images/tutorial-web.png')}
-                style={styles.imageTutorial}
-              />
-            </ThemedView>
-          </Collapsible>
+        <Text style={styles.tagline}>
+          Smarter Plant Care Through Artificial Intelligence
+        </Text>
 
-          <Collapsible title="Images">
-            <ThemedText type="small">
-              For static images, you can use the <ThemedText type="code">@2x</ThemedText> and{' '}
-              <ThemedText type="code">@3x</ThemedText> suffixes to provide files for different
-              screen densities.
-            </ThemedText>
-            <Image source={require('@/assets/images/react-logo.png')} style={styles.imageReact} />
-            <ExternalLink href="https://reactnative.dev/docs/images">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
+        <View style={styles.versionBadge}>
+          <Text style={styles.versionText}>
+            AI POWERED PLANT DISEASE DETECTION
+          </Text>
+        </View>
+      </View>
 
-          <Collapsible title="Light and dark mode components">
-            <ThemedText type="small">
-              This template has light and dark mode support. The{' '}
-              <ThemedText type="code">useColorScheme()</ThemedText> hook lets you inspect what the
-              user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
+      {/* Introduction */}
+      <View style={styles.card}>
+        <SectionTitle title="About the Project" />
 
-          <Collapsible title="Animations">
-            <ThemedText type="small">
-              This template includes an example of an animated component. The{' '}
-              <ThemedText type="code">src/components/ui/collapsible.tsx</ThemedText> component uses
-              the powerful <ThemedText type="code">react-native-reanimated</ThemedText> library to
-              animate opening this hint.
-            </ThemedText>
-          </Collapsible>
-        </ThemedView>
-        {Platform.OS === 'web' && <WebBadge />}
-      </ThemedView>
+        <Text style={styles.bodyText}>
+          LeafSense AI is an intelligent plant disease detection application
+          designed to help users identify plant diseases through leaf images.
+          By combining computer vision and deep learning, the application
+          analyzes uploaded images and predicts the most likely disease.
+        </Text>
+
+        <Text style={styles.bodyText}>
+          The goal is to make plant disease identification more accessible
+          and help users make informed decisions about plant health.
+        </Text>
+      </View>
+
+      {/* Statistics */}
+      <SectionTitle title="Model at a Glance" />
+
+      <View style={styles.statsGrid}>
+        <View style={styles.statCard}>
+          <Text style={styles.statNumber}>31</Text>
+          <Text style={styles.statLabel}>Disease Classes</Text>
+        </View>
+
+        <View style={styles.statCard}>
+          <Text style={styles.statNumber}>8</Text>
+          <Text style={styles.statLabel}>Supported Crops</Text>
+        </View>
+
+        <View style={styles.statCard}>
+          <Text style={styles.statNumber}>99.01%</Text>
+          <Text style={styles.statLabel}>Test Accuracy</Text>
+        </View>
+
+        <View style={styles.statCard}>
+          <Text style={styles.statNumber}>B0</Text>
+          <Text style={styles.statLabel}>EfficientNet Model</Text>
+        </View>
+      </View>
+
+      {/* Supported Crops */}
+      <View style={styles.card}>
+        <SectionTitle title="Supported Crops" />
+
+        <Text style={styles.bodyText}>
+          The current model supports disease classification for these eight crops:
+        </Text>
+
+        <View style={styles.cropGrid}>
+          {crops.map((crop) => (
+            <View key={crop} style={styles.cropItem}>
+              <Text style={styles.cropText}>{crop}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {/* Features */}
+      <SectionTitle title="Application Features" />
+
+      {features.map((feature) => (
+        <View key={feature.title} style={styles.featureCard}>
+          <Text style={styles.featureIcon}>{feature.icon}</Text>
+
+          <View style={styles.featureContent}>
+            <Text style={styles.featureTitle}>{feature.title}</Text>
+
+            <Text style={styles.featureDescription}>
+              {feature.description}
+            </Text>
+          </View>
+        </View>
+      ))}
+
+      {/* Technology Stack */}
+      <View style={styles.card}>
+        <SectionTitle title="Technology Stack" />
+
+        <View style={styles.techRow}>
+          <Text style={styles.techLabel}>Mobile Application</Text>
+          <Text style={styles.techValue}>React Native, Expo</Text>
+        </View>
+
+        <View style={styles.techRow}>
+          <Text style={styles.techLabel}>Backend</Text>
+          <Text style={styles.techValue}>Python, FastAPI</Text>
+        </View>
+
+        <View style={styles.techRow}>
+          <Text style={styles.techLabel}>AI Model</Text>
+          <Text style={styles.techValue}>EfficientNet-B0</Text>
+        </View>
+
+        <View style={styles.techRow}>
+          <Text style={styles.techLabel}>Database</Text>
+          <Text style={styles.techValue}>Supabase</Text>
+        </View>
+
+        <View style={styles.techRow}>
+          <Text style={styles.techLabel}>AI Explanations</Text>
+          <Text style={styles.techValue}>Google Gemini</Text>
+        </View>
+
+        <View style={styles.techRow}>
+          <Text style={styles.techLabel}>Dataset</Text>
+          <Text style={styles.techValue}>PlantVillage</Text>
+        </View>
+      </View>
+
+      {/* Server Settings */}
+      <View style={styles.card}>
+        <SectionTitle title="Server Settings" />
+
+        <Text style={styles.bodyText}>
+          Configure the address of the computer running the LeafSense AI backend.
+          This is useful when connecting to your laptop through a different Wi-Fi
+          network or mobile hotspot.
+        </Text>
+
+        <Text style={styles.inputLabel}>
+          Backend Server URL
+        </Text>
+
+        <TextInput
+          style={styles.serverInput}
+          value={serverUrl}
+          onChangeText={(text) => {
+            setServerUrl(text);
+            setConnectionMessage('');
+          }}
+          placeholder="http://192.168.1.100:8000"
+          placeholderTextColor="#94A3B8"
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+          editable={!saving && !testing}
+        />
+
+        <Pressable
+          style={[
+            styles.serverButton,
+            styles.testButton,
+            testing && styles.disabledButton,
+          ]}
+          onPress={handleTestConnection}
+          disabled={testing || saving}
+        >
+          <Text style={styles.testButtonText}>
+            {testing ? 'Testing Connection...' : 'Test Connection'}
+          </Text>
+        </Pressable>
+
+        {connectionMessage !== '' && (
+          <Text
+            style={[
+              styles.connectionMessage,
+              {
+                color: connectionSuccess ? '#218044' : '#DC2626',
+              },
+            ]}
+          >
+            {connectionSuccess ? '✓ ' : '✕ '}
+            {connectionMessage}
+          </Text>
+        )}
+
+        <Pressable
+          style={[
+            styles.serverButton,
+            styles.saveButton,
+            saving && styles.disabledButton,
+          ]}
+          onPress={handleSaveServer}
+          disabled={saving || testing}
+        >
+          <Text style={styles.saveButtonText}>
+            {saving ? 'Saving...' : 'Save Server Address'}
+          </Text>
+        </Pressable>
+
+        <Text style={styles.serverHint}>
+          Make sure your phone and laptop are connected to the same Wi-Fi
+          network or mobile hotspot, and that the backend server is running.
+        </Text>
+      </View>
+
+      {/* Limitations */}
+      <View style={styles.noticeCard}>
+        <Text style={styles.noticeTitle}>Important Note</Text>
+
+        <Text style={styles.noticeText}>
+          Predictions are based on the diseases included in the model's
+          training dataset. The current model supports eight crops and does
+          not cover every plant disease. Its performance in real-world
+          field conditions may differ from its test accuracy.
+        </Text>
+      </View>
+
+      {/* Footer */}
+      <View style={styles.footer}>
+        <Text style={styles.footerTitle}>LeafSense AI 🌱</Text>
+
+        <Text style={styles.footerText}>
+          Growing a healthier future with AI.
+        </Text>
+
+        <Text style={styles.copyright}>
+          Developed as an academic project
+        </Text>
+      </View>
     </ScrollView>
   );
 }
 
+// --------------------------------------------------
+// STYLES
+// --------------------------------------------------
+
 const styles = StyleSheet.create({
-  scrollView: {
-    flex: 1,
-  },
-  contentContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
   container: {
-    maxWidth: MaxContentWidth,
-    flexGrow: 1,
+    flex: 1,
+    backgroundColor: '#F5FAF5',
   },
-  titleContainer: {
-    gap: Spacing.three,
+
+  content: {
+    padding: 18,
+    paddingBottom: 35,
+  },
+
+  header: {
     alignItems: 'center',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.six,
+    paddingVertical: 28,
   },
-  centerText: {
+
+  logo: {
+    width: 76,
+    height: 76,
+    borderRadius: 24,
+    backgroundColor: '#E1F2E3',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+
+  logoText: {
+    fontSize: 38,
+  },
+
+  appName: {
+    fontSize: 29,
+    fontWeight: '800',
+    color: '#1B5E20',
+  },
+
+  tagline: {
+    fontSize: 13,
+    color: '#64748B',
+    marginTop: 7,
     textAlign: 'center',
   },
-  pressed: {
-    opacity: 0.7,
+
+  versionBadge: {
+    backgroundColor: '#E4F3E6',
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginTop: 17,
   },
-  linkButton: {
+
+  versionText: {
+    color: '#23733A',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+
+  card: {
+    backgroundColor: '#FFFFFF',
+    padding: 18,
+    borderRadius: 18,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E7EFE7',
+  },
+
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1B4332',
+    marginBottom: 13,
+  },
+
+  bodyText: {
+    fontSize: 13,
+    lineHeight: 21,
+    color: '#52635A',
+    marginBottom: 9,
+  },
+
+  statsGrid: {
     flexDirection: 'row',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.five,
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 22,
+  },
+
+  statCard: {
+    width: '48%',
+    flexGrow: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 17,
+    borderWidth: 1,
+    borderColor: '#E7EFE7',
+  },
+
+  statNumber: {
+    fontSize: 25,
+    fontWeight: '800',
+    color: '#218044',
+  },
+
+  statLabel: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 5,
+  },
+
+  cropGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 9,
+    marginTop: 8,
+  },
+
+  cropItem: {
+    backgroundColor: '#EAF5EB',
+    borderRadius: 10,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+  },
+
+  cropText: {
+    color: '#246B37',
+    fontWeight: '600',
+    fontSize: 12,
+  },
+
+  featureCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 15,
+    marginBottom: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E7EFE7',
+  },
+
+  featureIcon: {
+    fontSize: 27,
+    marginRight: 14,
+  },
+
+  featureContent: {
+    flex: 1,
+  },
+
+  featureTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#234B32',
+    marginBottom: 5,
+  },
+
+  featureDescription: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 18,
+  },
+
+  techRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EDF2ED',
+  },
+
+  techLabel: {
+    color: '#64748B',
+    fontSize: 12,
+  },
+
+  techValue: {
+    color: '#245D35',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  // Server Settings Styles
+
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#234B32',
+    marginBottom: 8,
+  },
+
+  serverInput: {
+    backgroundColor: '#F5FAF5',
+    borderWidth: 1,
+    borderColor: '#D5E5D7',
+    borderRadius: 10,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+    fontSize: 13,
+    color: '#1B4332',
+    marginBottom: 12,
+  },
+
+  serverButton: {
+    paddingVertical: 13,
+    borderRadius: 10,
+    alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.one,
+    marginTop: 5,
+  },
+
+  testButton: {
+    backgroundColor: '#E4F3E6',
+  },
+
+  testButtonText: {
+    color: '#23733A',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+
+  saveButton: {
+    backgroundColor: '#218044',
+    marginTop: 12,
+  },
+
+  saveButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+
+  disabledButton: {
+    opacity: 0.5,
+  },
+
+  connectionMessage: {
+    fontSize: 12,
+    marginTop: 10,
+    lineHeight: 18,
+  },
+
+  serverHint: {
+    color: '#94A3B8',
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 12,
+  },
+
+  // Important Note
+
+  noticeCard: {
+    backgroundColor: '#FFF8E8',
+    padding: 17,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: '#F2E4BE',
+    marginBottom: 22,
+  },
+
+  noticeTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#946515',
+    marginBottom: 8,
+  },
+
+  noticeText: {
+    fontSize: 12,
+    lineHeight: 19,
+    color: '#806B42',
+  },
+
+  // Footer
+
+  footer: {
     alignItems: 'center',
+    paddingVertical: 15,
   },
-  sectionsWrapper: {
-    gap: Spacing.five,
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.three,
+
+  footerTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#1B5E20',
   },
-  collapsibleContent: {
-    alignItems: 'center',
+
+  footerText: {
+    color: '#64748B',
+    fontSize: 12,
+    marginTop: 5,
   },
-  imageTutorial: {
-    width: '100%',
-    aspectRatio: 296 / 171,
-    borderRadius: Spacing.three,
-    marginTop: Spacing.two,
-  },
-  imageReact: {
-    width: 100,
-    height: 100,
-    alignSelf: 'center',
+
+  copyright: {
+    color: '#94A3B8',
+    fontSize: 10,
+    marginTop: 12,
   },
 });
